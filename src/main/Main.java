@@ -43,7 +43,7 @@ public class Main {
         // GET /db-test -> "Connection established" or "Connection failed: ..."
         server.createContext("/db-test", ex -> {
             try (Connection c = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
-                send(ex, 200, "Connection established");
+                send(ex, 200, "Connection established:)");
             } catch (SQLException e) {
                 send(ex, 500, "Connection failed: " + e.getMessage());
             }
