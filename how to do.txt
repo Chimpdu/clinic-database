@@ -1,6 +1,0 @@
-1. step 1: docker build -t clinic-app:1.0 .
-2. step 2: 'XeUVYbMt93YlAh0A8wUsjhciCad7ywFO' | docker login registry.cloud.cbh.kth.se `
-  -u 'robot$deploy-cf56181a-878e-4cdd-9a3f-d5356ffeb3f9+clinic-app' `
-  --password-stdin
-3. docker build -t registry.cloud.cbh.kth.se/deploy-cf56181a-878e-4cdd-9a3f-d5356ffeb3f9/clinic-app .
-4. docker push registry.cloud.cbh.kth.se/deploy-cf56181a-878e-4cdd-9a3f-d5356ffeb3f9/clinic-app
