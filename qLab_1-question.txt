@@ -1,0 +1,60 @@
+lab1
+
+ 
+
+The lab is done in group of 2 persons. The lab is not just about implementing features, but mostly about learing how to code with databases which means that the quality of the code is also a factor in grading. Presenting your solutions is done 12/9 and you allocate a time slot through Canvas.
+
+ 
+
+If something is unclear about the lab, ASK the teacher!
+
+
+
+
+In this lab we use the the model you worked on in assignment 1, this means you have to combine your solutions in your group, The goal is to make a program, with UI, using the database according to the requirements.
+
+ 
+
+In the lab you need to setup a SQL database (recommended is postgres or mysql) and create your database in it.
+
+ 
+
+After that you need to write a program that access the database (recommended is Java or Python, if you want to use anything else you have to talk to the teacher). The program should create a UI for accessing and using the database.  For lower degree its fine with a text interface.
+
+
+
+For higher degree the system should support free text doctor notes which can included files or images, The UI must be graphical.
+
+-------
+
+Usefull links
+
+https://www.tutorialspoint.com/python_data_access/index.htm
+    
+
+
+
+Links to an external site.
+
+https://dev.mysql.com/downloads/
+    
+
+
+
+Links to an external site.
+
+https://www.postgresql.org/download/
+    
+
+
+
+Links to an external site.
+
+https://dev.mysql.com/doc/refman/9.4/en/docker-mysql-getting-started.html
+    
+
+
+
+Links to an external site.
+
+https://www.docker.com/blog/how-to-use-the-postgres-docker-official-image/
