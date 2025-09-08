@@ -1,1 +1,1 @@
-psycopg[binary]
+pip install psycopg[binary]
