@@ -109,8 +109,8 @@ class MainInterface:
         tk.Entry(top, textvariable=d_num, width=18).grid(row=0, column=7, padx=4)
 
         headers = [
-            "patient_id","patient_personnumer","patient_name",
-            "doctor_personnumer","doctor_id","doctor_name"
+            "patient_personnumer","patient_name",
+            "doctor_personnumer","doctor_name"
         ]
 
         tk.Button(
@@ -127,26 +127,24 @@ class MainInterface:
         if self.role == "super":
             # Add 
             sep = tk.Frame(top, height=2, bd=1, relief="sunken"); sep.grid(row=1, column=0, columnspan=12, sticky="we", pady=6)
-            new_pn = tk.StringVar(); new_name = tk.StringVar(); new_pid = tk.StringVar(); new_doc = tk.StringVar()
+            new_pn = tk.StringVar(); new_name = tk.StringVar(); new_doc = tk.StringVar()
             tk.Label(top, text="Add patient: personnumer").grid(row=2, column=0, padx=4)
             tk.Entry(top, textvariable=new_pn, width=18).grid(row=2, column=1, padx=4)
             tk.Label(top, text="full name").grid(row=2, column=2, padx=4)
             tk.Entry(top, textvariable=new_name, width=18).grid(row=2, column=3, padx=4)
-            tk.Label(top, text="patient_id").grid(row=2, column=4, padx=4)
-            tk.Entry(top, textvariable=new_pid, width=18).grid(row=2, column=5, padx=4)
-            tk.Label(top, text="doctor personnumer").grid(row=2, column=6, padx=4)
-            tk.Entry(top, textvariable=new_doc, width=18).grid(row=2, column=7, padx=4)
+            tk.Label(top, text="doctor personnumer").grid(row=2, column=4, padx=4)
+            tk.Entry(top, textvariable=new_doc, width=18).grid(row=2, column=5, padx=4)
             tk.Button(
                 top, text="Add",
                 command=lambda: self._add(
-                    lambda: backend.patient_insert(new_pn.get(), new_name.get(), new_pid.get(), new_doc.get()),
+                    lambda: backend.patient_insert(new_pn.get(), new_name.get(), new_doc.get()),
                     lb, backend.patient_view, headers
                 )
-            ).grid(row=2, column=8, padx=6)
+            ).grid(row=2, column=6, padx=6)
 
             # Delete
             del_pid = tk.StringVar()
-            tk.Label(top, text="Delete patient_id").grid(row=3, column=0, padx=4)
+            tk.Label(top, text="Delete patient personnumer").grid(row=3, column=0, padx=4)
             tk.Entry(top, textvariable=del_pid, width=18).grid(row=3, column=1, padx=4)
             tk.Button(
                 top, text="Delete",
@@ -155,7 +153,7 @@ class MainInterface:
 
             # Update 
             up_pid = tk.StringVar(); up_pname = tk.StringVar(); up_docpn = tk.StringVar()
-            tk.Label(top, text="Update by patient_id").grid(row=4, column=0, padx=4)
+            tk.Label(top, text="Update by patient personnumer").grid(row=4, column=0, padx=4)
             tk.Entry(top, textvariable=up_pid, width=18).grid(row=4, column=1, padx=4)
             tk.Label(top, text="new full name").grid(row=4, column=2, padx=4)
             tk.Entry(top, textvariable=up_pname, width=18).grid(row=4, column=3, padx=4)
@@ -175,22 +173,20 @@ class MainInterface:
     def open_doctors(self):
         win, top, lb = self._make_page("Doctors")
 
-        d_name = tk.StringVar(); d_num = tk.StringVar(); d_id = tk.StringVar()
+        d_name = tk.StringVar(); d_num = tk.StringVar()
         p_name = tk.StringVar(); p_num = tk.StringVar()
 
         tk.Label(top, text="Doctor name").grid(row=0, column=0, padx=4)
         tk.Entry(top, textvariable=d_name, width=18).grid(row=0, column=1, padx=4)
         tk.Label(top, text="Doctor personnumer").grid(row=0, column=2, padx=4)
         tk.Entry(top, textvariable=d_num, width=18).grid(row=0, column=3, padx=4)
-        tk.Label(top, text="Doctor ID").grid(row=0, column=4, padx=4)
-        tk.Entry(top, textvariable=d_id, width=14).grid(row=0, column=5, padx=4)
-        tk.Label(top, text="Patient name").grid(row=0, column=6, padx=4)
-        tk.Entry(top, textvariable=p_name, width=18).grid(row=0, column=7, padx=4)
-        tk.Label(top, text="Patient personnumer").grid(row=0, column=8, padx=4)
-        tk.Entry(top, textvariable=p_num, width=18).grid(row=0, column=9, padx=4)
+        tk.Label(top, text="Patient name").grid(row=0, column=4, padx=4)
+        tk.Entry(top, textvariable=p_name, width=18).grid(row=0, column=5, padx=4)
+        tk.Label(top, text="Patient personnumer").grid(row=0, column=6, padx=4)
+        tk.Entry(top, textvariable=p_num, width=18).grid(row=0, column=7, padx=4)
 
         headers = [
-            "doctor_personnumer","doctor_id","doctor_name","dept_id",
+            "doctor_personnumer","doctor_name","dept_id",
             "patient_personnumer","patient_name"
         ]
 
@@ -198,38 +194,36 @@ class MainInterface:
             top, text="Search",
             command=lambda: self._fill_with_headers(
                 lb, headers,
-                backend.doctor_search(d_name.get(), d_num.get(), d_id.get(), p_name.get(), p_num.get())
-            )
-        ).grid(row=0, column=10, padx=6)
+                backend.doctor_search(d_name.get(), d_num.get(), p_name.get(), p_num.get())
+                )
+        ).grid(row=0, column=8, padx=6)
         tk.Button(
             top, text="View All",
             command=lambda: self._fill_with_headers(lb, headers, backend.doctor_view())
-        ).grid(row=0, column=11, padx=6)
+        ).grid(row=0, column=9, padx=6)
 
         if self.role == "super":
             # Add 
             sep = tk.Frame(top, height=2, bd=1, relief="sunken"); sep.grid(row=1, column=0, columnspan=12, sticky="we", pady=6)
-            nd_num = tk.StringVar(); nd_name = tk.StringVar(); nd_id = tk.StringVar(); ndept = tk.StringVar()
+            nd_num = tk.StringVar(); nd_name = tk.StringVar(); ndept = tk.StringVar()
             tk.Label(top, text="Add doctor: personnumer").grid(row=2, column=0, padx=4)
             tk.Entry(top, textvariable=nd_num, width=18).grid(row=2, column=1, padx=4)
             tk.Label(top, text="full name").grid(row=2, column=2, padx=4)
             tk.Entry(top, textvariable=nd_name, width=18).grid(row=2, column=3, padx=4)
-            tk.Label(top, text="doctor_id").grid(row=2, column=4, padx=4)
-            tk.Entry(top, textvariable=nd_id, width=14).grid(row=2, column=5, padx=4)
-            tk.Label(top, text="dept_id").grid(row=2, column=6, padx=4)
-            tk.Entry(top, textvariable=ndept, width=14).grid(row=2, column=7, padx=4)
+            tk.Label(top, text="dept_id").grid(row=2, column=4, padx=4)
+            tk.Entry(top, textvariable=ndept, width=14).grid(row=2, column=5, padx=4)
             tk.Button(
                 top, text="Add",
                 command=lambda: self._add(
-                    lambda: backend.doctor_insert(nd_num.get(), nd_name.get(), nd_id.get(), ndept.get()),
+                    lambda: backend.doctor_insert(nd_num.get(), nd_name.get(), ndept.get()),
                     lb, backend.doctor_view, headers
                 )
-            ).grid(row=2, column=8, padx=6)
+            ).grid(row=2, column=6, padx=6)
 
             # Delete
             del_did = tk.StringVar()
-            tk.Label(top, text="Delete doctor_id").grid(row=3, column=0, padx=4)
-            tk.Entry(top, textvariable=del_did, width=14).grid(row=3, column=1, padx=4)
+            tk.Label(top, text="Delete doctor personnumer").grid(row=3, column=0, padx=4)
+            tk.Entry(top, textvariable=del_did, width=18).grid(row=3, column=1, padx=4)
             tk.Button(
                 top, text="Delete",
                 command=lambda: self._add(lambda: backend.doctor_delete(del_did.get()), lb, backend.doctor_view, headers)
@@ -237,8 +231,8 @@ class MainInterface:
 
             # Update
             up_did = tk.StringVar(); up_dname = tk.StringVar(); up_dept = tk.StringVar()
-            tk.Label(top, text="Update by doctor_id").grid(row=4, column=0, padx=4)
-            tk.Entry(top, textvariable=up_did, width=14).grid(row=4, column=1, padx=4)
+            tk.Label(top, text="Update by doctor personnumer").grid(row=4, column=0, padx=4)
+            tk.Entry(top, textvariable=up_did, width=18).grid(row=4, column=1, padx=4)
             tk.Label(top, text="new full name").grid(row=4, column=2, padx=4)
             tk.Entry(top, textvariable=up_dname, width=18).grid(row=4, column=3, padx=4)
             tk.Label(top, text="new dept_id").grid(row=4, column=4, padx=4)

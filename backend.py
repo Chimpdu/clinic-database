@@ -101,18 +101,17 @@ def person_update_name(personnumer: str, full_name: str | None):
 def patient_view():
     with get_conn() as (conn, cur):
         cur.execute("""
-            SELECT pa.patient_id,
+            SELECT 
                    pe.personnumer   AS patient_personnumer,
                    pe.full_name     AS patient_name,
                    pa.doctor_personnumer,
-                   d.doctor_id,
                    dp.full_name     AS doctor_name
             FROM patient pa
             JOIN person pe ON pe.personnumer = pa.personnumer
             -- left join because doctor_personnumer is not set to NOT NULL
             LEFT JOIN doctor d ON d.personnumer = pa.doctor_personnumer
             LEFT JOIN person dp ON dp.personnumer = d.personnumer
-            ORDER BY pa.patient_id;
+            ORDER BY pa.personnumer;
         """)
         return cur.fetchall()
 
@@ -129,22 +128,21 @@ def patient_search(patient_name="", patient_personnumer="", doctor_name="", doct
     clause = " AND ".join(where) if where else "1=1"
     with get_conn() as (conn, cur):
         cur.execute(f"""
-            SELECT pa.patient_id,
+            SELECT 
                    pe.personnumer   AS patient_personnumer,
                    pe.full_name     AS patient_name,
                    pa.doctor_personnumer,
-                   d.doctor_id,
                    dp.full_name     AS doctor_name
             FROM patient pa
             JOIN person pe ON pe.personnumer = pa.personnumer
             LEFT JOIN doctor d ON d.personnumer = pa.doctor_personnumer
             LEFT JOIN person dp ON dp.personnumer = d.personnumer
             WHERE {clause}
-            ORDER BY pa.patient_id;
+            ORDER BY pa.personnumer;
         """, tuple(args))
         return cur.fetchall()
 
-def patient_insert(patient_personnumer: str, patient_name: str, patient_id: str, doctor_personnumer: str | None):
+def patient_insert(patient_personnumer: str, patient_name: str, doctor_personnumer: str | None):
     with get_conn() as (conn, cur):
         cur.execute("""
             INSERT INTO person (personnumer, full_name)
@@ -152,29 +150,29 @@ def patient_insert(patient_personnumer: str, patient_name: str, patient_id: str,
             ON CONFLICT (personnumer) DO NOTHING;
         """, (patient_personnumer, patient_name))
         cur.execute("""
-            INSERT INTO patient (personnumer, patient_id, doctor_personnumer)
-            VALUES (%s, %s, %s)
-        """, (patient_personnumer, patient_id, (doctor_personnumer or None)))
+            INSERT INTO patient (personnumer, doctor_personnumer)
+            VALUES (%s, %s)
+            ON CONFLICT (personnumer) DO NOTHING;
+        """, (patient_personnumer, (doctor_personnumer or None)))
         conn.commit()
-###################################here is a problem, we should update by personnumer not patient_ID
-def patient_update(patient_id: str, new_doctor_personnumer: str | None = None, new_patient_name: str | None = None):
-    # Update doctor link
+
+def patient_update(patient_personnumer: str,
+                   new_doctor_personnumer: str | None = None,
+                   new_patient_name: str | None = None):
     with get_conn() as (conn, cur):
         if not _is_blank(new_doctor_personnumer):
-            cur.execute("UPDATE patient SET doctor_personnumer=%s WHERE patient_id=%s",
-                        (new_doctor_personnumer, patient_id))
+            cur.execute("UPDATE patient SET doctor_personnumer=%s WHERE personnumer=%s",
+                        (new_doctor_personnumer, patient_personnumer))
         if not _is_blank(new_patient_name):
-            # Update person.name via patient -> personnumer
-            cur.execute("""
-                UPDATE person SET full_name=%s
-                WHERE personnumer=(SELECT personnumer FROM patient WHERE patient_id=%s)
-            """, (new_patient_name, patient_id))
+            cur.execute("UPDATE person SET full_name=%s WHERE personnumer=%s",
+                        (new_patient_name, patient_personnumer))
         conn.commit()
-###################################here is a problem, we should update by personnumer not patient_ID
-def patient_delete(patient_id: str):
+
+def patient_delete(patient_personnumer: str):
     with get_conn() as (conn, cur):
-        cur.execute("DELETE FROM patient WHERE patient_id=%s", (patient_id,))
+        cur.execute("DELETE FROM patient WHERE personnumer=%s", (patient_personnumer,))
         conn.commit()
+
 
 #  DOCTORS 
 def doctor_view():
@@ -182,7 +180,6 @@ def doctor_view():
         cur.execute("""
             SELECT DISTINCT
                    d.personnumer          AS doctor_personnumer,
-                   d.doctor_id,
                    dp.full_name           AS doctor_name,
                    d.dept_id,
                    p.personnumer          AS patient_personnumer,
@@ -191,18 +188,16 @@ def doctor_view():
             JOIN person dp ON dp.personnumer = d.personnumer
             LEFT JOIN patient p ON p.doctor_personnumer = d.personnumer
             LEFT JOIN person pp ON pp.personnumer = p.personnumer
-            ORDER BY d.doctor_id;
+            ORDER BY d.personnumer;
         """)
         return cur.fetchall()
 
-def doctor_search(doctor_name="", doctor_personnumer="", doctor_id="", patient_name="", patient_personnumer=""):
+def doctor_search(doctor_name="", doctor_personnumer="", patient_name="", patient_personnumer=""):
     where, args = [], []
     if doctor_name:
         where.append("dp.full_name ILIKE %s");           args.append(f"%{doctor_name}%")
     if doctor_personnumer:
         where.append("d.personnumer ILIKE %s");          args.append(f"%{doctor_personnumer}%")
-    if doctor_id:
-        where.append("d.doctor_id ILIKE %s");            args.append(f"%{doctor_id}%")
     if patient_name:
         where.append("pp.full_name ILIKE %s");           args.append(f"%{patient_name}%")
     if patient_personnumer:
@@ -212,7 +207,6 @@ def doctor_search(doctor_name="", doctor_personnumer="", doctor_id="", patient_n
         cur.execute(f"""
             SELECT DISTINCT
                    d.personnumer          AS doctor_personnumer,
-                   d.doctor_id,
                    dp.full_name           AS doctor_name,
                    d.dept_id,
                    p.personnumer          AS patient_personnumer,
@@ -222,11 +216,11 @@ def doctor_search(doctor_name="", doctor_personnumer="", doctor_id="", patient_n
             LEFT JOIN patient p ON p.doctor_personnumer = d.personnumer
             LEFT JOIN person pp ON pp.personnumer = p.personnumer
             WHERE {clause}
-            ORDER BY d.doctor_id;
+            ORDER BY d.personnumer;
         """, tuple(args))
         return cur.fetchall()
 
-def doctor_insert(doctor_personnumer: str, doctor_name: str, doctor_id: str, dept_id: str | None):
+def doctor_insert(doctor_personnumer: str, doctor_name: str, dept_id: str | None):
     with get_conn() as (conn, cur):
         cur.execute("""
             INSERT INTO person (personnumer, full_name)
@@ -234,25 +228,27 @@ def doctor_insert(doctor_personnumer: str, doctor_name: str, doctor_id: str, dep
             ON CONFLICT (personnumer) DO NOTHING;
         """, (doctor_personnumer, doctor_name))
         cur.execute("""
-            INSERT INTO doctor (personnumer, doctor_id, dept_id)
-            VALUES (%s, %s, %s)
-        """, (doctor_personnumer, doctor_id, (dept_id or None)))
+            INSERT INTO doctor (personnumer, dept_id)
+            VALUES (%s, %s)
+            ON CONFLICT (personnumer) DO NOTHING;
+        """, (doctor_personnumer, (dept_id or None)))
         conn.commit()
-###################################here is a problem, we should update by personnumer
-def doctor_update(doctor_id: str, new_dept_id: str | None = None, new_doctor_name: str | None = None):
+
+def doctor_update(doctor_personnumer: str,
+                  new_dept_id: str | None = None,
+                  new_doctor_name: str | None = None):
     with get_conn() as (conn, cur):
         if not _is_blank(new_dept_id):
-            cur.execute("UPDATE doctor SET dept_id=%s WHERE doctor_id=%s", (new_dept_id, doctor_id))
+            cur.execute("UPDATE doctor SET dept_id=%s WHERE personnumer=%s",
+                        (new_dept_id, doctor_personnumer))
         if not _is_blank(new_doctor_name):
-            cur.execute("""
-                UPDATE person SET full_name=%s
-                WHERE personnumer=(SELECT personnumer FROM doctor WHERE doctor_id=%s)
-            """, (new_doctor_name, doctor_id))
+            cur.execute("UPDATE person SET full_name=%s WHERE personnumer=%s",
+                        (new_doctor_name, doctor_personnumer))
         conn.commit()
-###################################here is a problem, we should update by personnumer not patient_ID
-def doctor_delete(doctor_id: str):
+
+def doctor_delete(doctor_personnumer: str):
     with get_conn() as (conn, cur):
-        cur.execute("DELETE FROM doctor WHERE doctor_id=%s", (doctor_id,))
+        cur.execute("DELETE FROM doctor WHERE personnumer=%s", (doctor_personnumer,))
         conn.commit()
 
 #  APPOINTMENTS 

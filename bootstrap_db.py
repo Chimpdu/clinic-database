@@ -65,14 +65,12 @@ CREATE TABLE IF NOT EXISTS department(
 
 CREATE TABLE IF NOT EXISTS doctor(
     personnumer           TEXT PRIMARY KEY REFERENCES person(personnumer) ON DELETE CASCADE,
-    doctor_id             TEXT NOT NULL UNIQUE,
     dept_id               TEXT REFERENCES department(dept_id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS patient(
     personnumer           TEXT PRIMARY KEY REFERENCES person(personnumer) ON DELETE CASCADE,
-    patient_id            TEXT NOT NULL UNIQUE,
-    doctor_personnumer    TEXT REFERENCES doctor(personnumer)
+    doctor_personnumer    TEXT REFERENCES doctor(personnumer) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS appointment(
@@ -81,8 +79,8 @@ CREATE TABLE IF NOT EXISTS appointment(
     appoint_month         INT,
     appoint_day           INT,
     appoint_location      TEXT,
-    patient_personnumer   TEXT REFERENCES patient(personnumer),
-    doctor_personnumer    TEXT REFERENCES doctor(personnumer)
+    patient_personnumer   TEXT REFERENCES patient(personnumer) ON DELETE SET NULL,
+    doctor_personnumer    TEXT REFERENCES doctor(personnumer) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS observation(
