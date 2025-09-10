@@ -1,1 +1,2 @@
-psycopg[binary]
+pip install psycopg[binary]
+pip install sv_ttk
