@@ -1,5 +1,7 @@
 from db import get_conn
 import psycopg
+from datetime import date
+from calendar import monthrange
 # with this we can handle null and empty values
 def _to_int(x):
     x = (x or "").strip()
@@ -7,7 +9,7 @@ def _to_int(x):
 
 def _is_blank(x) -> bool:
     return x is None or (isinstance(x, str) and x.strip() == "")
-
+# get oid from large objects
 def lo_save_file(path: str) -> int:
     """Create a Large Object from a local file and return its OID."""
     with open(path, "rb") as f:
@@ -17,7 +19,48 @@ def lo_save_file(path: str) -> int:
         oid = cur.fetchone()[0]
         conn.commit()
         return oid
+# verify the date
+def validate_date_parts(year, month, day, *, label="date"):
+    def norm(name, v):
+        if isinstance(v, str):
+            try:
+                return _to_int(v) 
+            except Exception:
+                raise ValueError(f"{label}: {name} must be an integer or empty.")
+        if v is None or isinstance(v, int):
+            return v
+        raise ValueError(f"{label}: {name} must be str/int/None.")
 
+    y = norm("year", year)
+    m = norm("month", month)
+    d = norm("day", day)
+
+    if y is None and m is None and d is None:
+        return (None, None, None)
+    # basic ranges
+    if y is not None and not (1900 <= y <= 3000):
+        raise ValueError(f"{label}: year must be 1900..3000.")
+    if m is not None and not (1 <= m <= 12):
+        raise ValueError(f"{label}: month must be 1..12.")
+    if d is not None and not (1 <= d <= 31):
+        raise ValueError(f"{label}: day must be 1..31.")
+    # month day limit
+    if d is not None and m is not None:
+        if y is not None:
+            _, dim = monthrange(y, m)  
+        else:
+           #Feb up to 29, 30-day months up to 30
+            dim = 29 if m == 2 else (30 if m in (4, 6, 9, 11) else 31)
+        if d > dim:
+            if y is not None:
+                raise ValueError(f"{label}: {y}-{m:02d} has {dim} days; got {d}.")
+            else:
+                raise ValueError(f"{label}: month {m} allows up to {dim} days; got {d}.")
+    # if all parts exist, fully validate
+    if y is not None and m is not None and d is not None:
+        date(y, m, d)  
+
+    return (y, m, d)
 
 # PERSON 
 def person_search(q: str):
@@ -266,35 +309,50 @@ def appointment_search(appoint_id="", year="", month="", day="",
 
 def appointment_insert(appoint_id: str, year: str, month: str, day: str,
                        location: str, patient_personnumer: str | None, doctor_personnumer: str | None):
+    y, m, d = validate_date_parts(year, month, day, label="appointment date")
     with get_conn() as (conn, cur):
         cur.execute("""
             INSERT INTO appointment (appoint_id, appoint_year, appoint_month, appoint_day,
                                      appoint_location, patient_personnumer, doctor_personnumer)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (
-            appoint_id,
-            _to_int(year), _to_int(month), _to_int(day),
-            (location or None),
-            (patient_personnumer or None),
-            (doctor_personnumer or None)
-        ))
+        """, (appoint_id, y, m, d, (location or None),
+              (patient_personnumer or None), (doctor_personnumer or None)))
         conn.commit()
 
 def appointment_update(appoint_id: str, year: str | None = None, month: str | None = None, day: str | None = None,
                        location: str | None = None, patient_personnumer: str | None = None, doctor_personnumer: str | None = None):
-    sets, args = [], []
-    if not _is_blank(year):    sets.append("appoint_year=%s");  args.append(_to_int(year))
-    if not _is_blank(month):   sets.append("appoint_month=%s"); args.append(_to_int(month))
-    if not _is_blank(day):     sets.append("appoint_day=%s");   args.append(_to_int(day))
-    if not _is_blank(location):sets.append("appoint_location=%s"); args.append(location)
-    if not _is_blank(patient_personnumer): sets.append("patient_personnumer=%s"); args.append(patient_personnumer)
-    if not _is_blank(doctor_personnumer):  sets.append("doctor_personnumer=%s");  args.append(doctor_personnumer)
-    if not sets:
-        return
-    args.append(appoint_id)
+    y_in = None if _is_blank(year)  else _to_int(year) if isinstance(year, str)  else year
+    m_in = None if _is_blank(month) else _to_int(month) if isinstance(month, str) else month
+    d_in = None if _is_blank(day)   else _to_int(day) if isinstance(day, str)   else day
+
     with get_conn() as (conn, cur):
+        # If any date piece is provided, fetch missing pieces and validate the merged 
+        if y_in is not None or m_in is not None or d_in is not None:
+            cur.execute("""SELECT appoint_year, appoint_month, appoint_day
+                           FROM appointment WHERE appoint_id=%s""", (appoint_id,))
+            row = cur.fetchone()
+            if row is None:
+                raise ValueError("appointment not found")
+            base_y, base_m, base_d = row
+            merged_y = y_in if y_in is not None else base_y
+            merged_m = m_in if m_in is not None else base_m
+            merged_d = d_in if d_in is not None else base_d
+            validate_date_parts(merged_y, merged_m, merged_d, label="appointment date")
+
+        sets, args = [], []
+        if y_in is not None:                 sets.append("appoint_year=%s");        args.append(y_in)
+        if m_in is not None:                 sets.append("appoint_month=%s");       args.append(m_in)
+        if d_in is not None:                 sets.append("appoint_day=%s");         args.append(d_in)
+        if not _is_blank(location):          sets.append("appoint_location=%s");    args.append(location)
+        if not _is_blank(patient_personnumer): sets.append("patient_personnumer=%s"); args.append(patient_personnumer)
+        if not _is_blank(doctor_personnumer):  sets.append("doctor_personnumer=%s");  args.append(doctor_personnumer)
+
+        if not sets:
+            return
+        args.append(appoint_id)
         cur.execute(f"UPDATE appointment SET {', '.join(sets)} WHERE appoint_id=%s", tuple(args))
         conn.commit()
+
 
 def appointment_delete(appoint_id: str):
     with get_conn() as (conn, cur):
@@ -366,31 +424,50 @@ def observation_insert(obser_id: str, year: str, month: str, day: str,
                        appoint_id: str | None,
                        comment_text: str | None,
                        file_oid: int | None):
+    y, m, d = validate_date_parts(year, month, day, label="observation date")
     with get_conn() as (conn, cur):
         cur.execute("""
             INSERT INTO observation (obser_id, obs_year, obs_month, obs_day, appoint_id,
                                      obs_comment_text, obs_file_oid)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (obser_id, _to_int(year), _to_int(month), _to_int(day),
-              (appoint_id or None), (comment_text or None), file_oid))
+        """, (obser_id, y, m, d, (appoint_id or None), (comment_text or None), file_oid))
         conn.commit()
 
 def observation_update(obser_id: str, year: str | None = None, month: str | None = None, day: str | None = None,
                        appoint_id: str | None = None,
                        comment_text: str | None = None,
                        file_oid: int | None = None):
-    sets, args = [], []
-    if not _is_blank(year):         sets.append("obs_year=%s");          args.append(_to_int(year))
-    if not _is_blank(month):        sets.append("obs_month=%s");         args.append(_to_int(month))
-    if not _is_blank(day):          sets.append("obs_day=%s");           args.append(_to_int(day))
-    if not _is_blank(appoint_id):   sets.append("appoint_id=%s");        args.append(appoint_id)
-    if comment_text is not None:    sets.append("obs_comment_text=%s");  args.append(comment_text)
-    if file_oid is not None:        sets.append("obs_file_oid=%s");      args.append(file_oid)
-    if not sets: return
-    args.append(obser_id)
+    y_in = None if _is_blank(year)  else _to_int(year) if isinstance(year, str)  else year
+    m_in = None if _is_blank(month) else _to_int(month) if isinstance(month, str) else month
+    d_in = None if _is_blank(day)   else _to_int(day) if isinstance(day, str)   else day
+
     with get_conn() as (conn, cur):
+        if y_in is not None or m_in is not None or d_in is not None:
+            cur.execute("""SELECT obs_year, obs_month, obs_day
+                           FROM observation WHERE obser_id=%s""", (obser_id,))
+            row = cur.fetchone()
+            if row is None:
+                raise ValueError("observation not found")
+            base_y, base_m, base_d = row
+            merged_y = y_in if y_in is not None else base_y
+            merged_m = m_in if m_in is not None else base_m
+            merged_d = d_in if d_in is not None else base_d
+            validate_date_parts(merged_y, merged_m, merged_d, label="observation date")
+
+        sets, args = [], []
+        if y_in is not None:               sets.append("obs_year=%s");          args.append(y_in)
+        if m_in is not None:               sets.append("obs_month=%s");         args.append(m_in)
+        if d_in is not None:               sets.append("obs_day=%s");           args.append(d_in)
+        if not _is_blank(appoint_id):      sets.append("appoint_id=%s");        args.append(appoint_id)
+        if comment_text is not None:       sets.append("obs_comment_text=%s");  args.append(comment_text)
+        if file_oid is not None:           sets.append("obs_file_oid=%s");      args.append(file_oid)
+
+        if not sets:
+            return
+        args.append(obser_id)
         cur.execute(f"UPDATE observation SET {', '.join(sets)} WHERE obser_id=%s", tuple(args))
         conn.commit()
+
 
 def observation_delete(obser_id: str):
     with get_conn() as (conn, cur):
@@ -465,31 +542,50 @@ def diagnosis_insert(diagn_id: str, year: str, month: str, day: str,
                      obser_id: str | None,
                      comment_text: str | None,
                      file_oid: int | None):
+    y, m, d = validate_date_parts(year, month, day, label="diagnosis date")
     with get_conn() as (conn, cur):
         cur.execute("""
             INSERT INTO diagnosis (diagn_id, diagn_year, diagn_month, diagn_day, obser_id,
                                    diagn_comment_text, diagn_file_oid)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (diagn_id, _to_int(year), _to_int(month), _to_int(day),
-              (obser_id or None), (comment_text or None), file_oid))
+        """, (diagn_id, y, m, d, (obser_id or None), (comment_text or None), file_oid))
         conn.commit()
 
 def diagnosis_update(diagn_id: str, year: str | None = None, month: str | None = None, day: str | None = None,
                      obser_id: str | None = None,
                      comment_text: str | None = None,
                      file_oid: int | None = None):
-    sets, args = [], []
-    if not _is_blank(year):         sets.append("diagn_year=%s");         args.append(_to_int(year))
-    if not _is_blank(month):        sets.append("diagn_month=%s");        args.append(_to_int(month))
-    if not _is_blank(day):          sets.append("diagn_day=%s");          args.append(_to_int(day))
-    if not _is_blank(obser_id):     sets.append("obser_id=%s");           args.append(obser_id)
-    if comment_text is not None:    sets.append("diagn_comment_text=%s"); args.append(comment_text)
-    if file_oid is not None:        sets.append("diagn_file_oid=%s");     args.append(file_oid)
-    if not sets: return
-    args.append(diagn_id)
+    y_in = None if _is_blank(year)  else _to_int(year) if isinstance(year, str)  else year
+    m_in = None if _is_blank(month) else _to_int(month) if isinstance(month, str) else month
+    d_in = None if _is_blank(day)   else _to_int(day) if isinstance(day, str)   else day
+
     with get_conn() as (conn, cur):
+        if y_in is not None or m_in is not None or d_in is not None:
+            cur.execute("""SELECT diagn_year, diagn_month, diagn_day
+                           FROM diagnosis WHERE diagn_id=%s""", (diagn_id,))
+            row = cur.fetchone()
+            if row is None:
+                raise ValueError("diagnosis not found")
+            base_y, base_m, base_d = row
+            merged_y = y_in if y_in is not None else base_y
+            merged_m = m_in if m_in is not None else base_m
+            merged_d = d_in if d_in is not None else base_d
+            validate_date_parts(merged_y, merged_m, merged_d, label="diagnosis date")
+
+        sets, args = [], []
+        if y_in is not None:               sets.append("diagn_year=%s");         args.append(y_in)
+        if m_in is not None:               sets.append("diagn_month=%s");        args.append(m_in)
+        if d_in is not None:               sets.append("diagn_day=%s");          args.append(d_in)
+        if not _is_blank(obser_id):        sets.append("obser_id=%s");           args.append(obser_id)
+        if comment_text is not None:       sets.append("diagn_comment_text=%s"); args.append(comment_text)
+        if file_oid is not None:           sets.append("diagn_file_oid=%s");     args.append(file_oid)
+
+        if not sets:
+            return
+        args.append(diagn_id)
         cur.execute(f"UPDATE diagnosis SET {', '.join(sets)} WHERE diagn_id=%s", tuple(args))
         conn.commit()
+
 
 def diagnosis_delete(diagn_id: str):
     with get_conn() as (conn, cur):
