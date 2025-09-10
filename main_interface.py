@@ -1,29 +1,69 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog,ttk
 import backend
+
+import sv_ttk
+
+# class MainInterface:
+#     def __init__(self, role: str):
+#         self.role = role  # "super" or "normal"
+#         self.root = tk.Tk()
+#         self.root.title("Clinic")
+#         self.root.geometry("620x360")
+
+#         title = f"Clinic ({'Admin' if self.role=='super' else 'Viewer'})"
+#         tk.Label(self.root, text=title, font=("Georgia", 18, "bold")).pack(pady=12)
+
+#         btns = tk.Frame(self.root)
+#         btns.pack(pady=10)
+
+#         tk.Button(btns, text="Patients",      width=18, command=self.open_patients).grid(     row=0, column=0, padx=6, pady=6)
+#         tk.Button(btns, text="Doctors",       width=18, command=self.open_doctors).grid(      row=0, column=1, padx=6, pady=6)
+#         tk.Button(btns, text="Appointments",  width=18, command=self.open_appointments).grid( row=1, column=0, padx=6, pady=6)
+#         tk.Button(btns, text="Observations",  width=18, command=self.open_observations).grid( row=1, column=1, padx=6, pady=6)
+#         tk.Button(btns, text="Diagnoses",     width=18, command=self.open_diagnoses).grid(    row=2, column=0, padx=6, pady=6)
+#         tk.Button(btns, text="Clinics",       width=18, command=self.open_clinics).grid(      row=2, column=1, padx=6, pady=6)
+#         tk.Button(btns, text="Departments",   width=18, command=self.open_departments).grid(  row=3, column=0, padx=6, pady=6)
+#         # This is where the magic happens
+#         # sv_ttk.set_theme("dark")
+#         self.root.mainloop()
 
 class MainInterface:
     def __init__(self, role: str):
         self.role = role  # "super" or "normal"
         self.root = tk.Tk()
         self.root.title("Clinic")
-        self.root.geometry("620x360")
+        self.root.geometry("800x600")
+        self.root.config(bg="#f0f0f0")
 
         title = f"Clinic ({'Admin' if self.role=='super' else 'Viewer'})"
-        tk.Label(self.root, text=title, font=("Georgia", 18, "bold")).pack(pady=12)
+        tk.Label(self.root, text=title, font=("Georgia", 24, "bold"), bg="#f0f0f0", fg="#3498db").pack(pady=20)
 
-        btns = tk.Frame(self.root)
-        btns.pack(pady=10)
+        btns = tk.Frame(self.root, bg="#f0f0f0")
+        btns.pack(pady=20)
 
-        tk.Button(btns, text="Patients",      width=18, command=self.open_patients).grid(     row=0, column=0, padx=6, pady=6)
-        tk.Button(btns, text="Doctors",       width=18, command=self.open_doctors).grid(      row=0, column=1, padx=6, pady=6)
-        tk.Button(btns, text="Appointments",  width=18, command=self.open_appointments).grid( row=1, column=0, padx=6, pady=6)
-        tk.Button(btns, text="Observations",  width=18, command=self.open_observations).grid( row=1, column=1, padx=6, pady=6)
-        tk.Button(btns, text="Diagnoses",     width=18, command=self.open_diagnoses).grid(    row=2, column=0, padx=6, pady=6)
-        tk.Button(btns, text="Clinics",       width=18, command=self.open_clinics).grid(      row=2, column=1, padx=6, pady=6)
-        tk.Button(btns, text="Departments",   width=18, command=self.open_departments).grid(  row=3, column=0, padx=6, pady=6)
+        buttons = [
+            {"text": "Patients", "command": self.open_patients},
+            {"text": "Doctors", "command": self.open_doctors},
+            {"text": "Appointments", "command": self.open_appointments},
+            {"text": "Observations", "command": self.open_observations},
+            {"text": "Diagnoses", "command": self.open_diagnoses},
+            {"text": "Clinics", "command": self.open_clinics},
+            {"text": "Departments", "command": self.open_departments},
+        ]
+
+        row_val = 0
+        col_val = 0
+
+        for button in buttons:
+            tk.Button(btns, text=button["text"], width=15, height=2, font=("Georgia", 14), bg="#ecf0f1", fg="#2ecc71", command=button["command"]).grid(row=row_val, column=col_val, padx=10, pady=10)
+            col_val += 1
+            if col_val > 3:
+                col_val = 0
+                row_val += 1
 
         self.root.mainloop()
+
 
     # utilities 
     def _make_page(self, title: str, width=1000, height=640):
