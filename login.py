@@ -14,14 +14,14 @@ def do_login():
 
     if login_backend.check_admin(username, password):
         messagebox.showinfo("Login Successful", f"Welcome, {username} (Admin)!")
-        set_dsn("super")   # editable connection
+        set_dsn("super")   # we changed the global variable so it is now in admin mode
         root.destroy()
         MainInterface("super")
         return
 
     if login_backend.check_user(username, password):
         messagebox.showinfo("Login Successful", f"Welcome, {username}!")
-        set_dsn("normal")  # read-only connection
+        set_dsn("normal")  # read-only user connection
         root.destroy()
         MainInterface("normal")
         return

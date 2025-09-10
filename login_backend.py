@@ -1,5 +1,7 @@
 import psycopg
 from db_config import USER_DSN  
+
+# we use user_dsn before the user is authorized for security
 def check_admin(name, password) -> bool:
     with psycopg.connect(USER_DSN, autocommit=True) as conn:
         with conn.cursor() as cur:

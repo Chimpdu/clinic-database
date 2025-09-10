@@ -2,6 +2,21 @@ import tkinter as tk
 from tkinter import messagebox, filedialog
 import backend
 
+# add scroll bar so the contents will not be pushed outside the screen
+class HScrollFrame(tk.Frame):
+    def __init__(self, master, height=130, **kwargs):
+        super().__init__(master, **kwargs)
+        self.canvas = tk.Canvas(self, height=height, highlightthickness=0)
+        self.hbar = tk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(xscrollcommand=self.hbar.set)
+
+        self.canvas.pack(side="top", fill="x", expand=False)
+        self.hbar.pack(side="top", fill="x")
+
+        self.inner = tk.Frame(self.canvas)
+        self.inner.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+
 class MainInterface:
     def __init__(self, role: str):
         self.role = role  # "super" or "normal"
@@ -26,15 +41,37 @@ class MainInterface:
         self.root.mainloop()
 
     # utilities 
+    # keep HScrollFrame class from earlier in your file
+
     def _make_page(self, title: str, width=1000, height=640):
         win = tk.Toplevel(self.root)
         win.title(title)
         win.geometry(f"{width}x{height}")
-        top = tk.Frame(win); top.pack(fill="x", padx=8, pady=6)
-        mid = tk.Frame(win); mid.pack(fill="both", expand=True, padx=8, pady=6)
-        lb = tk.Listbox(mid, font=("Consolas", 10))  # monospaced for nicer columns
-        lb.pack(fill="both", expand=True)
+
+        # --- Scrollable header (top) ---
+        top_wrap = HScrollFrame(win, height=130)   # adjust height if you want more room
+        top_wrap.pack(fill="x", padx=8, pady=6)
+        top = top_wrap.inner  # use this as the parent for your grid() controls
+
+        # --- Results area with BOTH scrollbars ---
+        mid = tk.Frame(win)
+        mid.pack(fill="both", expand=True, padx=8, pady=6)
+
+        lb = tk.Listbox(mid, font=("Consolas", 10))
+        ysb = tk.Scrollbar(mid, orient="vertical", command=lb.yview)
+        xsb = tk.Scrollbar(mid, orient="horizontal", command=lb.xview)
+
+        # wire the listbox to the scrollbars
+        lb.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
+
+        # layout: vertical bar on right, horizontal bar on bottom, listbox takes the rest
+        ysb.pack(side="right", fill="y")
+        xsb.pack(side="bottom", fill="x")
+        lb.pack(side="left", fill="both", expand=True)
+
         return win, top, lb
+
+
 
     def _fill_with_headers(self, lb, headers, rows):
         lb.delete(0, tk.END)
@@ -49,8 +86,9 @@ class MainInterface:
 
     def _add(self, fn, lb, refresh_fn, headers):
         try:
-            fn()
-            self._fill_with_headers(lb, headers, refresh_fn())
+            fn() # perform insert/delete/update
+            # 
+            self._fill_with_headers(lb, headers, refresh_fn()) #re-query and reprint the data
         except Exception as e:
             messagebox.showerror("DB error", str(e))
 
@@ -349,11 +387,14 @@ class MainInterface:
         tk.Label(top, text="Doctor personnumer").grid(row=0, column=16, padx=4)
         tk.Entry(top, textvariable=doc_num, width=16).grid(row=0, column=17, padx=4)
 
+        # headers (Observations)
         headers = [
             "obser_id","year","month","day","appoint_id",
             "patient_personnumer","patient_name",
-            "doctor_personnumer","doctor_name","comment(bytes)"
+            "doctor_personnumer","doctor_name",
+            "comment_text", "file_oid"
         ]
+
 
         tk.Button(
             top, text="Search",
@@ -397,16 +438,14 @@ class MainInterface:
             tk.Label(top, textvariable=file_path, fg="gray").grid(row=2, column=14, columnspan=4, sticky="w")
 
             def do_add_obs():
-                data = None
-                txt = comment_text.get().strip()
+                comment_txt = (comment_text.get().strip() or None)
+                file_oid = None
                 fp = file_path.get().strip()
                 if fp:
-                    with open(fp, "rb") as f:
-                        data = f.read()
-                elif txt:
-                    data = txt.encode("utf-8")
-                backend.observation_insert(no_id.get(), ny.get(), nm.get(), nd.get(), napid.get(), data)
-
+                    file_oid = backend.lo_save_file(fp)   # create LO and get OID
+                backend.observation_insert(no_id.get(), ny.get(), nm.get(), nd.get(),
+                                        (napid.get() or None),
+                                        comment_txt, file_oid)
             tk.Button(
                 top, text="Add",
                 command=lambda: self._add(do_add_obs, lb, backend.observation_view, headers)
@@ -447,15 +486,14 @@ class MainInterface:
             tk.Label(top, textvariable=u_file_path, fg="gray").grid(row=4, column=14, columnspan=4, sticky="w")
 
             def do_update_obs():
-                data = None
+                new_comment_txt = (u_comment_text.get().strip() if u_comment_text.get().strip() != "" else None)
+                new_file_oid = None
                 fp = u_file_path.get().strip()
-                txt = u_comment_text.get().strip()
                 if fp:
-                    with open(fp, "rb") as f:
-                        data = f.read()
-                elif txt:
-                    data = txt.encode("utf-8")
-                backend.observation_update(uo_id.get(), uy.get(), um.get(), ud.get(), uapid.get(), data)
+                    new_file_oid = backend.lo_save_file(fp)
+                backend.observation_update(uo_id.get(), uy.get(), um.get(), ud.get(),
+                                        (uapid.get() or None),
+                                        new_comment_txt, new_file_oid)
 
             tk.Button(
                 top, text="Update",
@@ -498,7 +536,8 @@ class MainInterface:
 
         headers = [
             "diagn_id","year","month","day","obser_id","appoint_id",
-            "patient_personnumer","patient_name","doctor_personnumer","doctor_name","comment(bytes)"
+            "patient_personnumer","patient_name","doctor_personnumer","doctor_name",
+            "comment_text","file_oid"
         ]
 
         tk.Button(
@@ -545,16 +584,14 @@ class MainInterface:
             tk.Label(top, textvariable=file_path, fg="gray").grid(row=2, column=14, columnspan=5, sticky="w")
 
             def do_add_diagn():
-                data = None
-                txt = comment_text.get().strip()
+                comment_txt = (comment_text.get().strip() or None)
+                file_oid = None
                 fp = file_path.get().strip()
                 if fp:
-                    with open(fp, "rb") as f:
-                        data = f.read()
-                elif txt:
-                    data = txt.encode("utf-8")
-                backend.diagnosis_insert(ndg_id.get(), ny.get(), nm.get(), nd.get(), nobs_id.get(), data)
-
+                    file_oid = backend.lo_save_file(fp)
+                backend.diagnosis_insert(ndg_id.get(), ny.get(), nm.get(), nd.get(),
+                                        (nobs_id.get() or None),
+                                        comment_txt, file_oid)
             tk.Button(
                 top, text="Add",
                 command=lambda: self._add(do_add_diagn, lb, backend.diagnosis_view, headers)
@@ -595,15 +632,14 @@ class MainInterface:
             tk.Label(top, textvariable=u_file_path, fg="gray").grid(row=4, column=14, columnspan=5, sticky="w")
 
             def do_update_diagn():
-                data = None
+                new_comment_txt = (u_comment_text.get().strip() if u_comment_text.get().strip() != "" else None)
+                new_file_oid = None
                 fp = u_file_path.get().strip()
-                txt = u_comment_text.get().strip()
                 if fp:
-                    with open(fp, "rb") as f:
-                        data = f.read()
-                elif txt:
-                    data = txt.encode("utf-8")
-                backend.diagnosis_update(udg_id.get(), uy.get(), um.get(), ud.get(), uobs_id.get(), data)
+                    new_file_oid = backend.lo_save_file(fp)
+                backend.diagnosis_update(udg_id.get(), uy.get(), um.get(), ud.get(),
+                                        (uobs_id.get() or None),
+                                        new_comment_txt, new_file_oid)
 
             tk.Button(
                 top, text="Update",

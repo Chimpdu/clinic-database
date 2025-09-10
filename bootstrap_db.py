@@ -1,6 +1,7 @@
 import os
 import psycopg
 import getpass
+import db
 from urllib.parse import quote as urlquote, urlparse
 
 def build_superuser_dsn():
@@ -15,19 +16,13 @@ def build_superuser_dsn():
     pw   = getpass.getpass(f"Password for {user}@{host}:{port}/postgres: ")
     return f"postgresql://{user}:{urlquote(pw)}@{host}:{port}/postgres"
 
-def admin_dsn_from_superuser(super_dsn: str) -> str:
-    """Build an admin DSN for clinic_db using same host/port as superuser DSN."""
-    p = urlparse(super_dsn)
-    host = p.hostname or "localhost"
-    port = p.port or 5432
-    return f"postgresql://admin:admin@{host}:{port}/clinic_db"
-
 SUPERUSER_URL    = build_superuser_dsn()
-ADMIN_CLINIC_DSN = admin_dsn_from_superuser(SUPERUSER_URL)
-
+ADMIN_CLINIC_DSN = db.ADMIN_DSN
+# here we use this anonymous block to have conditional logic that SQL does not exhibit
 DDL_ROLES_DB = r"""
 DO $$
 BEGIN
+-- select 1 whil return 1 if it is found
    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin') THEN
       CREATE ROLE admin LOGIN PASSWORD 'admin';
    ELSE
@@ -49,7 +44,8 @@ GRANT CONNECT ON DATABASE clinic_db TO "user";
 """
 
 SCHEMA_SQL = r"""
--- main tables here (lowercase names to avoid quoting)
+CREATE EXTENSION IF NOT EXISTS lo;
+-- main tables here
 CREATE TABLE IF NOT EXISTS person(
     personnumer   TEXT PRIMARY KEY,
     full_name     TEXT
@@ -94,7 +90,8 @@ CREATE TABLE IF NOT EXISTS observation(
     obs_year              INT,
     obs_month             INT,
     obs_day               INT,
-    obs_comment           BYTEA,
+    obs_comment_text      TEXT,
+    obs_file_oid          OID,
     appoint_id            TEXT REFERENCES appointment(appoint_id) ON DELETE SET NULL
 );
 
@@ -103,7 +100,8 @@ CREATE TABLE IF NOT EXISTS diagnosis(
     diagn_year            INT,
     diagn_month           INT,
     diagn_day             INT,
-    diagn_comment         BYTEA,
+    diagn_comment_text    TEXT,
+    diagn_file_oid        OID,
     obser_id              TEXT REFERENCES observation(obser_id) ON DELETE SET NULL
 );
 
@@ -120,13 +118,21 @@ CREATE TABLE IF NOT EXISTS users(
     password  TEXT NOT NULL
 );
 
+CREATE TRIGGER observation_lo_cleanup
+BEFORE UPDATE OR DELETE ON observation
+FOR EACH ROW EXECUTE FUNCTION lo_manage(obs_file_oid);
+
+CREATE TRIGGER diagnosis_lo_cleanup
+BEFORE UPDATE OR DELETE ON diagnosis
+FOR EACH ROW EXECUTE FUNCTION lo_manage(diagn_file_oid);
+
 -- Privileges for read-only "user" role (tables)
 REVOKE ALL ON SCHEMA public FROM "user";
 GRANT  USAGE ON SCHEMA public TO   "user";
 
 REVOKE ALL   ON ALL TABLES IN SCHEMA public FROM "user";
 GRANT  SELECT ON ALL TABLES IN SCHEMA public TO   "user";
-
+-- this is for future tables
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM "user";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT  SELECT ON TABLES TO   "user";
 

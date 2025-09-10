@@ -1,11 +1,23 @@
 from db import get_conn
-
+import psycopg
+# with this we can handle null and empty values
 def _to_int(x):
     x = (x or "").strip()
     return int(x) if x != "" else None
 
 def _is_blank(x) -> bool:
     return x is None or (isinstance(x, str) and x.strip() == "")
+
+def lo_save_file(path: str) -> int:
+    """Create a Large Object from a local file and return its OID."""
+    with open(path, "rb") as f:
+        data = f.read()
+    with get_conn() as (conn, cur):
+        cur.execute("SELECT lo_from_bytea(0, %s)", (psycopg.Binary(data),))
+        oid = cur.fetchone()[0]
+        conn.commit()
+        return oid
+
 
 # PERSON 
 def person_search(q: str):
@@ -54,6 +66,7 @@ def patient_view():
                    dp.full_name     AS doctor_name
             FROM patient pa
             JOIN person pe ON pe.personnumer = pa.personnumer
+            -- left join because doctor_personnumer is not set to NOT NULL
             LEFT JOIN doctor d ON d.personnumer = pa.doctor_personnumer
             LEFT JOIN person dp ON dp.personnumer = d.personnumer
             ORDER BY pa.patient_id;
@@ -100,7 +113,7 @@ def patient_insert(patient_personnumer: str, patient_name: str, patient_id: str,
             VALUES (%s, %s, %s)
         """, (patient_personnumer, patient_id, (doctor_personnumer or None)))
         conn.commit()
-
+###################################here is a problem, we should update by personnumer not patient_ID
 def patient_update(patient_id: str, new_doctor_personnumer: str | None = None, new_patient_name: str | None = None):
     # Update doctor link
     with get_conn() as (conn, cur):
@@ -114,7 +127,7 @@ def patient_update(patient_id: str, new_doctor_personnumer: str | None = None, n
                 WHERE personnumer=(SELECT personnumer FROM patient WHERE patient_id=%s)
             """, (new_patient_name, patient_id))
         conn.commit()
-
+###################################here is a problem, we should update by personnumer not patient_ID
 def patient_delete(patient_id: str):
     with get_conn() as (conn, cur):
         cur.execute("DELETE FROM patient WHERE patient_id=%s", (patient_id,))
@@ -182,7 +195,7 @@ def doctor_insert(doctor_personnumer: str, doctor_name: str, doctor_id: str, dep
             VALUES (%s, %s, %s)
         """, (doctor_personnumer, doctor_id, (dept_id or None)))
         conn.commit()
-
+###################################here is a problem, we should update by personnumer
 def doctor_update(doctor_id: str, new_dept_id: str | None = None, new_doctor_name: str | None = None):
     with get_conn() as (conn, cur):
         if not _is_blank(new_dept_id):
@@ -193,7 +206,7 @@ def doctor_update(doctor_id: str, new_dept_id: str | None = None, new_doctor_nam
                 WHERE personnumer=(SELECT personnumer FROM doctor WHERE doctor_id=%s)
             """, (new_doctor_name, doctor_id))
         conn.commit()
-
+###################################here is a problem, we should update by personnumer not patient_ID
 def doctor_delete(doctor_id: str):
     with get_conn() as (conn, cur):
         cur.execute("DELETE FROM doctor WHERE doctor_id=%s", (doctor_id,))
@@ -296,7 +309,8 @@ def observation_view():
                    o.appoint_id,
                    p.personnumer AS patient_personnumer, pp.full_name AS patient_name,
                    d.personnumer AS doctor_personnumer, dp.full_name AS doctor_name,
-                   o.obs_comment
+                   o.obs_comment_text,
+                   o.obs_file_oid
             FROM observation o
             LEFT JOIN appointment a ON a.appoint_id = o.appoint_id
             LEFT JOIN patient p ON p.personnumer = a.patient_personnumer
@@ -336,7 +350,7 @@ def observation_search(obser_id="", year="", month="", day="", appoint_id="",
                    o.appoint_id,
                    p.personnumer AS patient_personnumer, pp.full_name AS patient_name,
                    d.personnumer AS doctor_personnumer, dp.full_name AS doctor_name,
-                   o.obs_comment
+                   o.obs_comment_text, o.obs_file_oid
             FROM observation o
             LEFT JOIN appointment a ON a.appoint_id = o.appoint_id
             LEFT JOIN patient p ON p.personnumer = a.patient_personnumer
@@ -349,33 +363,33 @@ def observation_search(obser_id="", year="", month="", day="", appoint_id="",
         return cur.fetchall()
 
 def observation_insert(obser_id: str, year: str, month: str, day: str,
-                       appoint_id: str | None, comment_bytes: bytes | None):
+                       appoint_id: str | None,
+                       comment_text: str | None,
+                       file_oid: int | None):
     with get_conn() as (conn, cur):
         cur.execute("""
-            INSERT INTO observation (obser_id, obs_year, obs_month, obs_day, appoint_id, obs_comment)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (obser_id, _to_int(year), _to_int(month), _to_int(day), (appoint_id or None), comment_bytes))
+            INSERT INTO observation (obser_id, obs_year, obs_month, obs_day, appoint_id,
+                                     obs_comment_text, obs_file_oid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (obser_id, _to_int(year), _to_int(month), _to_int(day),
+              (appoint_id or None), (comment_text or None), file_oid))
         conn.commit()
 
 def observation_update(obser_id: str, year: str | None = None, month: str | None = None, day: str | None = None,
-                       appoint_id: str | None = None, comment_bytes: bytes | None = None):
+                       appoint_id: str | None = None,
+                       comment_text: str | None = None,
+                       file_oid: int | None = None):
     sets, args = [], []
-    if not _is_blank(year):    sets.append("obs_year=%s");  args.append(_to_int(year))
-    if not _is_blank(month):   sets.append("obs_month=%s"); args.append(_to_int(month))
-    if not _is_blank(day):     sets.append("obs_day=%s");   args.append(_to_int(day))
-    if not _is_blank(appoint_id): sets.append("appoint_id=%s"); args.append(appoint_id)
-    if comment_bytes is not None:
-        sets.append("obs_comment=%s"); args.append(comment_bytes)
-    if not sets:
-        return
+    if not _is_blank(year):         sets.append("obs_year=%s");          args.append(_to_int(year))
+    if not _is_blank(month):        sets.append("obs_month=%s");         args.append(_to_int(month))
+    if not _is_blank(day):          sets.append("obs_day=%s");           args.append(_to_int(day))
+    if not _is_blank(appoint_id):   sets.append("appoint_id=%s");        args.append(appoint_id)
+    if comment_text is not None:    sets.append("obs_comment_text=%s");  args.append(comment_text)
+    if file_oid is not None:        sets.append("obs_file_oid=%s");      args.append(file_oid)
+    if not sets: return
     args.append(obser_id)
     with get_conn() as (conn, cur):
         cur.execute(f"UPDATE observation SET {', '.join(sets)} WHERE obser_id=%s", tuple(args))
-        conn.commit()
-
-def observation_update_comment(obser_id: str, data: bytes):
-    with get_conn() as (conn, cur):
-        cur.execute("UPDATE observation SET obs_comment=%s WHERE obser_id=%s", (data, obser_id))
         conn.commit()
 
 def observation_delete(obser_id: str):
@@ -391,7 +405,7 @@ def diagnosis_view():
                    dg.obser_id, o.appoint_id,
                    p.personnumer AS patient_personnumer, pp.full_name AS patient_name,
                    d.personnumer AS doctor_personnumer, dp.full_name AS doctor_name,
-                   dg.diagn_comment
+                   dg.diagn_comment_text, dg.diagn_file_oid
             FROM diagnosis dg
             LEFT JOIN observation o ON o.obser_id = dg.obser_id
             LEFT JOIN appointment a ON a.appoint_id = o.appoint_id
@@ -434,7 +448,7 @@ def diagnosis_search(diagn_id="", year="", month="", day="", obser_id="", appoin
                    dg.obser_id, o.appoint_id,
                    p.personnumer AS patient_personnumer, pp.full_name AS patient_name,
                    d.personnumer AS doctor_personnumer, dp.full_name AS doctor_name,
-                   dg.diagn_comment
+                   dg.diagn_comment_text, dg.diagn_file_oid
             FROM diagnosis dg
             LEFT JOIN observation o ON o.obser_id = dg.obser_id
             LEFT JOIN appointment a ON a.appoint_id = o.appoint_id
@@ -448,25 +462,30 @@ def diagnosis_search(diagn_id="", year="", month="", day="", obser_id="", appoin
         return cur.fetchall()
 
 def diagnosis_insert(diagn_id: str, year: str, month: str, day: str,
-                     obser_id: str | None, comment_bytes: bytes | None):
+                     obser_id: str | None,
+                     comment_text: str | None,
+                     file_oid: int | None):
     with get_conn() as (conn, cur):
         cur.execute("""
-            INSERT INTO diagnosis (diagn_id, diagn_year, diagn_month, diagn_day, obser_id, diagn_comment)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (diagn_id, _to_int(year), _to_int(month), _to_int(day), (obser_id or None), comment_bytes))
+            INSERT INTO diagnosis (diagn_id, diagn_year, diagn_month, diagn_day, obser_id,
+                                   diagn_comment_text, diagn_file_oid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (diagn_id, _to_int(year), _to_int(month), _to_int(day),
+              (obser_id or None), (comment_text or None), file_oid))
         conn.commit()
 
 def diagnosis_update(diagn_id: str, year: str | None = None, month: str | None = None, day: str | None = None,
-                     obser_id: str | None = None, comment_bytes: bytes | None = None):
+                     obser_id: str | None = None,
+                     comment_text: str | None = None,
+                     file_oid: int | None = None):
     sets, args = [], []
-    if not _is_blank(year):    sets.append("diagn_year=%s");  args.append(_to_int(year))
-    if not _is_blank(month):   sets.append("diagn_month=%s"); args.append(_to_int(month))
-    if not _is_blank(day):     sets.append("diagn_day=%s");   args.append(_to_int(day))
-    if not _is_blank(obser_id):sets.append("obser_id=%s");    args.append(obser_id)
-    if comment_bytes is not None:
-        sets.append("diagn_comment=%s"); args.append(comment_bytes)
-    if not sets:
-        return
+    if not _is_blank(year):         sets.append("diagn_year=%s");         args.append(_to_int(year))
+    if not _is_blank(month):        sets.append("diagn_month=%s");        args.append(_to_int(month))
+    if not _is_blank(day):          sets.append("diagn_day=%s");          args.append(_to_int(day))
+    if not _is_blank(obser_id):     sets.append("obser_id=%s");           args.append(obser_id)
+    if comment_text is not None:    sets.append("diagn_comment_text=%s"); args.append(comment_text)
+    if file_oid is not None:        sets.append("diagn_file_oid=%s");     args.append(file_oid)
+    if not sets: return
     args.append(diagn_id)
     with get_conn() as (conn, cur):
         cur.execute(f"UPDATE diagnosis SET {', '.join(sets)} WHERE diagn_id=%s", tuple(args))
